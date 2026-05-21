@@ -1,0 +1,20 @@
+{
+  "nav": {
+    "global_map": "Global Xarita",
+    "eco_ranking": "Ekologiya Reytingi",
+    "prediction": "AI Prognoz",
+    "behavior": "Xulq-atvor Tahlili",
+    "pro_monitoring": "Pro Monitoring"
+  },
+  "status": {
+    "system_active": "TIZIM FAOL"
+  },
+  "pro_monitoring": {
+    "title": "Kosmik Monitoring Markazi",
+    "subtitle": "Haqiqiy vaqt va NASA qatlamlari asosida emissiya tahlili",
+    "time_slider": "Vaqt Slayderi (soat)",
+    "factory_map": "Obyektlar Xaritasi",
+    "pollution_map": "Ifloslanish (Satallayt)",
+    "ai_report_title": "AI Analitik Hisoboti"
+  }
+}

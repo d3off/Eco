@@ -1,0 +1,20 @@
+{
+  "nav": {
+    "global_map": "Глобальная Карта",
+    "eco_ranking": "Эко-Рейтинг",
+    "prediction": "AI Прогноз",
+    "behavior": "Анализ Поведения",
+    "pro_monitoring": "Pro Мониторинг"
+  },
+  "status": {
+    "system_active": "СИСТЕМА АКТИВНА"
+  },
+  "pro_monitoring": {
+    "title": "Информационный Центр Мониторинга",
+    "subtitle": "Анализ выбросов на основе слоев NASA",
+    "time_slider": "Временная шкала (часы)",
+    "factory_map": "Карта Объектов",
+    "pollution_map": "Загрязнение (Спутник)",
+    "ai_report_title": "Аналитический Отчет ИИ"
+  }
+}

@@ -1,0 +1,151 @@
+:root {
+  /* NASA / SpaceX Deep Blue Space Theme Colors */
+  --bg-main: #060B19; /* Deep Space Blue */
+  --bg-panel: rgba(12, 22, 45, 0.65); /* Glassmorphism SpaceX Panel */
+  --text-main: #E2E8F0;
+  --text-muted: #8AA2CA; /* Light blue-ish grey */
+  
+  --accent-cyan: #00F0FF; /* Neon Cyan */
+  --accent-blue: #3B82F6;
+  --accent-purple: #8A2BE2;
+  
+  /* Status Colors */
+  --success: #10B981; /* 🟢 Safe */
+  --warning: #F59E0B; /* 🟡 Medium */
+  --danger: #EF4444;  /* 🔴 Dangerous */
+
+  --glass-border: rgba(0, 240, 255, 0.15); /* Slightly neon border */
+  --neon-shadow-cyan: 0 0 10px rgba(0, 240, 255, 0.3);
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--bg-main);
+  background-image: 
+    radial-gradient(circle at 10% 20%, rgba(0, 240, 255, 0.05), transparent 40%),
+    radial-gradient(circle at 90% 80%, rgba(59, 130, 246, 0.05), transparent 40%);
+  color: var(--text-main);
+  min-height: 100vh;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.app-container {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* Glassmorphism Panel */
+.glass-panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  padding: 1.5rem;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.glass-panel:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4);
+}
+
+/* Scrollbar styling for a tech look */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2); 
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 240, 255, 0.2); 
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 240, 255, 0.5); 
+}
+
+/* Map Animations */
+@keyframes pulseMarker {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.2); opacity: 0.8; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes ripple {
+  0% { transform: scale(0.5); opacity: 0.8; }
+  100% { transform: scale(2.5); opacity: 0; }
+}
+
+.map-marker-pulse {
+  animation: pulseMarker 2s infinite ease-in-out;
+  border-radius: 50%;
+  box-shadow: 0 0 15px currentColor;
+}
+
+.map-ripple {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: currentColor;
+  transform-origin: center;
+  animation: ripple 3s infinite ease-out;
+  margin-top: -50%;
+  margin-left: -50%;
+  pointer-events: none;
+}
+
+/* Custom Leaflet Popup overrides for Dark Theme */
+.leaflet-popup-content-wrapper {
+  background: rgba(13, 20, 35, 0.9) !important;
+  color: var(--text-main) !important;
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(10px);
+  border-radius: 8px !important;
+  box-shadow: 0 0 15px rgba(0, 0, 0, 0.5) !important;
+}
+.leaflet-popup-tip {
+  background: rgba(13, 20, 35, 0.9) !important;
+  border-bottom: 1px solid var(--glass-border);
+  border-right: 1px solid var(--glass-border);
+}
+
+/* Nav Links */
+.nav-link {
+  color: var(--text-muted);
+  text-decoration: none;
+  font-weight: 500;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.nav-link:hover {
+  color: var(--text-main);
+  background: rgba(255,255,255,0.05);
+}
+.nav-link.active {
+  color: var(--accent-cyan);
+  background: rgba(0, 240, 255, 0.1);
+  box-shadow: var(--neon-shadow-cyan);
+}
