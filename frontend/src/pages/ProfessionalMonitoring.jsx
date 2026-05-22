@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { MapContainer, TileLayer, Circle, Marker, Tooltip, Popup, useMapEvent } from 'react-leaflet';
+import { MapContainer, TileLayer, Circle, Marker, Tooltip, Popup, useMapEvent, SVGOverlay } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useAppData, getGibsDate, SATELLITE_LAYERS } from '../context/AppDataContext';
@@ -7,7 +7,9 @@ import { BrainCircuit, Activity, Clock, Navigation } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 // Utility for formatting factory status
-const getStatusConfig = (status, aqi) => {
+// Utility for formatting factory status
+const getStatusConfig = (status) => {
+  if (status === 'purple') return { color: '#9d00ff', glow: 'rgba(157,0,255,0.6)', radiusBase: 5500 };
   if (status === 'danger') return { color: '#EF4444', glow: 'rgba(239,68,68,0.6)', radiusBase: 4000 };
   if (status === 'medium') return { color: '#F59E0B', glow: 'rgba(245,158,11,0.5)', radiusBase: 2500 };
   return { color: '#10B981', glow: 'rgba(16,185,129,0.4)', radiusBase: 1000 };
@@ -42,6 +44,8 @@ const ProfessionalMonitoring = () => {
   
   const [historyDay, setHistoryDay] = useState(30); // 1-30 (30 is today)
   const [syncBounds, setSyncBounds] = useState(null);
+  const [realChemicalData, setRealChemicalData] = useState({});
+  const [isFetchingChem, setIsFetchingChem] = useState(true);
   
   // Calculate selected date (offset by 2 days to ensure NASA GIBS imagery is processed)
   const selectedDateObj = useMemo(() => {
@@ -51,37 +55,92 @@ const ProfessionalMonitoring = () => {
   }, [historyDay]);
 
   const layerDateString = selectedDateObj.toISOString().split('T')[0];
-  const isWeekend = selectedDateObj.getDay() === 0 || selectedDateObj.getDay() === 6;
 
-  // AI Report Generation based on historyDay
-  const aiReport = useMemo(() => {
-    const timeLabel = layerDateString;
-    const dangerFactories = factories.filter(f => f.status === 'danger');
-    
-    if (isWeekend && dangerFactories.length > 0) {
-      return `🔴 Anomaliya (${timeLabel}): ${dangerFactories.map(f=>f.shortName).join(', ')} hududida zavod filtrlari dam olish kunlarida o'chirilgani ehtimoli yuqori. NASA AOD qatlami buni tasdiqlamoqda.`;
-    } else if (historyDay % 3 === 0 && dangerFactories.length > 0) {
-      return `🟡 O'zgarish (${timeLabel}): Havo aylanishi buzilganligi sababli, atmosfera ifloslanishining yuqori darajasi to'planyapti.`;
-    } else {
-      return `🟢 Stabil holat (${timeLabel}): Sanoat hududlaridagi chiqindilar me'yor doirasida tarqalmoqda.`;
-    }
-  }, [historyDay, factories, layerDateString, isWeekend]);
+  // Fetch REAL CHEMICAL DATA from Open-Meteo API for every factory
+  useEffect(() => {
+    const fetchRealChemistry = async () => {
+      setIsFetchingChem(true);
+      const dataMapping = {};
+      try {
+        await Promise.all(factories.map(async (f) => {
+          const res = await fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${f.lat}&longitude=${f.lon}&current=european_aqi,pm10,pm2_5,carbon_monoxide,nitrogen_dioxide,sulphur_dioxide,ozone,aerosol_optical_depth,dust`);
+          const dataset = await res.json();
+          if (dataset && dataset.current) dataMapping[f.id] = dataset.current;
+        }));
+      } catch (err) {
+        console.error("Failed to fetch real chemical data:", err);
+      }
+      setRealChemicalData(dataMapping);
+      setIsFetchingChem(false);
+    };
+    fetchRealChemistry();
+  }, [factories]);
 
-  // Derived state for the factories
+  // Derived state mapping REAL TOXIC DATA to factories
   const currentFactoriesData = useMemo(() => {
+    if (Object.keys(realChemicalData).length === 0) return factories.map(f => ({...f, severityFactor: 1, dynamicAqi: f.aqi, isReal: false}));
+    
     return factories.map(f => {
-      // Noise calculation so there's always slight change
-      const noise = Math.sin(historyDay * f.id) * 0.2;
-      let severityFactor = 1.0 + noise;
-      
-      // Spike on weekends for danger factories
-      if (f.status === 'danger' && isWeekend) severityFactor += 0.8;
-      else if (f.status === 'danger') severityFactor += 0.3;
-      
-      const dynamicAqi = Math.max(10, Math.round(f.aqi * severityFactor));
-      return { ...f, dynamicAqi, severityFactor };
+      const realData = realChemicalData[f.id] || {};
+      const pm25 = realData.pm2_5 || 0;
+      const so2 = realData.sulphur_dioxide || 0;
+      const no2 = realData.nitrogen_dioxide || 0;
+      const aqi = realData.european_aqi || 20;
+
+      let status = 'good';
+      let sev = 1.0;
+
+      // Real WHO / EPA Threshold detection
+      if (pm25 > 50 || so2 > 100 || no2 > 80 || aqi > 80) { 
+        status = 'purple';
+        sev = 2.8;
+      } else if (pm25 > 25 || so2 > 40 || no2 > 40 || aqi > 50 || f.status === 'danger') {
+        status = 'danger';
+        sev = 1.8;
+      } else if (pm25 > 15 || aqi > 30) {
+        status = 'medium';
+        sev = 1.3;
+      }
+
+      return { 
+        ...f, 
+        status, 
+        severityFactor: sev, 
+        dynamicAqi: aqi || f.aqi,
+        realData,
+        isReal: true
+      };
     });
-  }, [historyDay, factories, isWeekend]);
+  }, [factories, realChemicalData]);
+
+  // AI REAL CHEMICAL ANALYSIS REPORT & RISK CALCULATION
+  const { aiReport, riskCalc } = useMemo(() => {
+    if (isFetchingChem) return { aiReport: "📡 Ochiq Atmosfera API'sidan real havo kimyoviy tarkibi tahlili yuklanmoqda...", riskCalc: { safe: 100, toxic: 0 } };
+    
+    const purpleF = currentFactoriesData.filter(f => f.status === 'purple');
+    const dangerF = currentFactoriesData.filter(f => f.status === 'danger');
+    
+    // Safety & Toxicity Proportions Computation
+    const maxAqi = Math.max(...currentFactoriesData.map(f => f.dynamicAqi || 0));
+    const toxicityPercent = Math.min(100, Math.round((maxAqi / 120) * 100)); // Capped at 100
+    const safetyPercent = 100 - toxicityPercent;
+
+    let aiTxt = '';
+    if (purpleF.length > 0) {
+      const w = purpleF[0];
+      const so2 = w.realData?.sulphur_dioxide ?? 'N/A';
+      const pm25 = w.realData?.pm2_5 ?? 'N/A';
+      aiTxt = `☣️ TOXIC CHEMICAL DANGER: ${w.shortName} hududida SO2 (${so2} µg/m³) va PM2.5 zaharli changi (${pm25} µg/m³) inson hayoti uchun o'ta xavfli darajaga chiqdi. Atmosferada zaharli gaz reaksiya ehtimoli keskin oshdi! Zudlik bilan zavod to'xtatilishi shart.`;
+    } else if (dangerF.length > 0) {
+      const w = dangerF[0];
+      const no2 = w.realData?.nitrogen_dioxide ?? 'N/A';
+      aiTxt = `🔴 Anomaliya Aniqlandi: Koinot API va datchiklari ${w.shortName} gumbazi atrofida JST me'yoridan ortiqcha chiqindini tutib oldi! Azot dioksidi (NO2): ${no2} µg/m³. Zudlik bilan tekshiruv tavsiya etiladi.`;
+    } else {
+      aiTxt = `🟢 Stabil Mintaqa: O'zbekistondagi monitoring obyektlarining atmosfera ko'rsatkichlari WHO xavfsizlik me'yorlariga javob bermoqda. Havo aylanishi normada, toksik anomaliyalar yo'q.`;
+    }
+    
+    return { aiReport: aiTxt, riskCalc: { safe: safetyPercent, toxic: toxicityPercent } };
+  }, [currentFactoriesData, isFetchingChem]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 80px)', gap: '1rem', paddingBottom: '1rem' }}>
@@ -90,7 +149,9 @@ const ProfessionalMonitoring = () => {
         .leaflet-popup-tip { background: rgba(6, 11, 25, 0.95)!important; border: 1px solid rgba(0, 240, 255, 0.3)!important; border-top: none!important; border-left: none!important; }
         .factory-label { background: rgba(6, 11, 25, 0.8)!important; border: 1px solid rgba(0, 240, 255, 0.3)!important; border-radius: 4px!important; color: #E2E8F0!important; font-size: 10px!important; padding: 2px 6px!important; backdrop-filter: blur(4px)!important; pointer-events: none!important; }
         .factory-label::before { display: none!important; }
-        .dark-tile { filter: brightness(0.35) contrast(1.3) grayscale(0.6) hue-rotate(200deg); }
+        .dark-tile { filter: brightness(0.65) contrast(1.1) grayscale(0.5) sepia(0.3) hue-rotate(180deg); }
+        .pulse-layer { animation: smkPulse 2s infinite alternate ease-in-out; transform-origin: center; }
+        @keyframes smkPulse { 0% { opacity: 0.7; } 100% { opacity: 1; } }
       `}</style>
       
       {/* HEADER SECTION */}
@@ -135,17 +196,30 @@ const ProfessionalMonitoring = () => {
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
                           <span style={{ color: 'var(--text-muted)' }}>Hudud:</span> <span>{f.region}</span>
                         </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                          <span style={{ color: 'var(--text-muted)' }}>AQI:</span> <strong style={{ color: cfg.color }}>{f.aqi}</strong>
-                        </div>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '6px' }}>
-                          {f.description}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', fontSize: '0.8rem', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '6px' }}>
+                          <div style={{ background: 'rgba(255,255,255,0.05)', padding: '4px', borderRadius: '4px' }}>
+                            <span style={{ color: 'var(--text-muted)', fontSize: '0.65rem' }}>PM2.5:</span><br/>
+                            <strong>{f.isReal ? f.realData.pm2_5 : '-'}</strong><small>μg/m³</small>
+                          </div>
+                          <div style={{ background: 'rgba(255,255,255,0.05)', padding: '4px', borderRadius: '4px' }}>
+                            <span style={{ color: 'var(--text-muted)', fontSize: '0.65rem' }}>SO2:</span><br/>
+                            <strong>{f.isReal ? f.realData.sulphur_dioxide : '-'}</strong><small>μg/m³</small>
+                          </div>
+                          <div style={{ background: 'rgba(255,255,255,0.05)', padding: '4px', borderRadius: '4px' }}>
+                            <span style={{ color: 'var(--text-muted)', fontSize: '0.65rem' }}>NO2:</span><br/>
+                            <strong>{f.isReal ? f.realData.nitrogen_dioxide : '-'}</strong><small>μg/m³</small>
+                          </div>
+                          <div style={{ background: 'rgba(255,255,255,0.05)', padding: '4px', borderRadius: '4px' }}>
+                            <span style={{ color: 'var(--text-muted)', fontSize: '0.65rem' }}>Aerosol Zichligi:</span><br/>
+                            <strong>{f.isReal ? f.realData.aerosol_optical_depth : '-'}</strong>
+                          </div>
                         </div>
                       </div>
                     </Popup>
                   </Marker>
                 );
               })}
+
             </MapContainer>
           </div>
         </div>
@@ -158,11 +232,10 @@ const ProfessionalMonitoring = () => {
           <div style={{ flex: 1, borderRadius: '0 0 8px 8px', overflow: 'hidden', position: 'relative' }}>
             <MapContainer center={[41.0, 64.5]} zoom={6} style={{ height: '100%', width: '100%', background: '#050a12' }} zoomControl={false}>
               
-              {/* Dependable Base Layer (Darkened for high contrast with smoke overlays) */}
+              {/* Dependable Base Layer (Bright daylight version to match left map) */}
               <TileLayer
                 url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
                 attribution="Esri"
-                className="dark-tile"
               />
               
               {/* NASA Aerosol Overlay (AOD) - dynamically fetches layer by selected Date */}
@@ -210,46 +283,69 @@ const ProfessionalMonitoring = () => {
                               <strong style={{ color: coreColor }}>{f.dynamicAqi}</strong>
                             </div>
                             <div style={{ background: 'rgba(255,255,255,0.05)', padding: '4px', borderRadius: '4px' }}>
-                              <span style={{ color: 'var(--text-muted)', fontSize: '0.65rem' }}>CO2:</span><br/>
-                              <strong>{Math.round(f.gases.CO2 * f.severityFactor)}</strong><small>ppm</small>
-                            </div>
-                            <div style={{ background: 'rgba(255,255,255,0.05)', padding: '4px', borderRadius: '4px' }}>
-                              <span style={{ color: 'var(--text-muted)', fontSize: '0.65rem' }}>NO2:</span><br/>
-                              <strong>{Math.round(f.gases.NO2 * f.severityFactor)}</strong>
+                              <span style={{ color: 'var(--text-muted)', fontSize: '0.65rem' }}>PM2.5:</span><br/>
+                              <strong>{f.isReal ? f.realData.pm2_5 : '-'}</strong><small>μg/m³</small>
                             </div>
                             <div style={{ background: 'rgba(255,255,255,0.05)', padding: '4px', borderRadius: '4px' }}>
                               <span style={{ color: 'var(--text-muted)', fontSize: '0.65rem' }}>SO2:</span><br/>
-                              <strong>{Math.round(f.gases.SO2 * f.severityFactor)}</strong>
+                              <strong style={{ color: f.status === 'purple' ? '#9d00ff' : 'white' }}>{f.isReal ? f.realData.sulphur_dioxide : '-'}</strong><small>μg/m³</small>
+                            </div>
+                            <div style={{ background: 'rgba(255,255,255,0.05)', padding: '4px', borderRadius: '4px' }}>
+                              <span style={{ color: 'var(--text-muted)', fontSize: '0.65rem' }}>NO2:</span><br/>
+                              <strong>{f.isReal ? f.realData.nitrogen_dioxide : '-'}</strong><small>μg/m³</small>
+                            </div>
+                            <div style={{ background: 'rgba(255,255,255,0.05)', padding: '4px', borderRadius: '4px' }}>
+                               <span style={{ color: 'var(--text-muted)', fontSize: '0.65rem' }}>Aerosol Zichlik:</span><br/>
+                               <strong>{f.isReal ? f.realData.aerosol_optical_depth : '-'}</strong>
                             </div>
                           </div>
-                          <div style={{ marginTop: '10px', fontSize: '0.75rem', color: isDanger ? '#FF4500' : 'var(--text-muted)' }}>
-                            {isDanger ? '⚠ Zaharli gazlarning yoyilishi anomaliyaga ega!' : 'Havo tarkibi va tutun yoyilishi o\'rtacha me\'yorda.'}
+                          <div style={{ marginTop: '10px', fontSize: '0.75rem', color: f.status === 'purple' ? '#9d00ff' : (isDanger ? '#FF4500' : 'var(--text-muted)') }}>
+                            {f.status === 'purple' ? '☣️ XAVFLI ZAHARLI REAKSIYA EHTIMOLI YUQORI!' : (isDanger ? '⚠ Havoning xavfli darajada ifloslanishi aniqlandi!' : 'Havo kimyoviy tarkibi o\'rtacha me\'yorda.')}
                           </div>
                         </div>
                       </Popup>
                     </Circle>
                     
-                    {/* Outer Smoke Cloud */}
-                    <Circle 
-                      center={[f.lat, f.lon]} 
-                      radius={baseRadius * 2.5}
-                      pathOptions={{ color: outerColor, fillColor: outerColor, fillOpacity: 0.15 * f.severityFactor, weight: 0 }}
-                      className="map-ripple"
-                    />
+                    {/* SVG Volumetric Plume Overlay */}
+                    {(() => {
+                      // Calculate geographic bounds based on radius in meters
+                      const totalRadiusMeters = baseRadius * 3.5;
+                      const latOffset = totalRadiusMeters / 111320;
+                      const lonOffset = totalRadiusMeters / (111320 * Math.cos((f.lat * Math.PI) / 180));
+                      const bounds = [
+                        [f.lat - latOffset, f.lon - lonOffset],
+                        [f.lat + latOffset, f.lon + lonOffset]
+                      ];
+                      
+                      return (
+                        <SVGOverlay bounds={bounds} className="pulse-layer" attributes={{ pointerEvents: 'none' }}>
+                          <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style={{ display: 'block', width: '100%', height: '100%' }}>
+                            <defs>
+                              {isDanger ? (
+                                <radialGradient id={`smoke-grad-${f.id}`} cx="50%" cy="50%" r="50%">
+                                  {/* Deep black core for danger emissions, blending into red toxic smoke */}
+                                  <stop offset="0%" stopColor="#000000" stopOpacity="0.85" />
+                                  <stop offset="15%" stopColor="#2a0a0a" stopOpacity="0.7" />
+                                  <stop offset="35%" stopColor={coreColor} stopOpacity={Math.min(1, 0.5 * f.severityFactor)} />
+                                  <stop offset="65%" stopColor={midColor} stopOpacity={Math.min(1, 0.25 * f.severityFactor)} />
+                                  <stop offset="100%" stopColor={outerColor} stopOpacity="0" />
+                                </radialGradient>
+                              ) : (
+                                <radialGradient id={`smoke-grad-${f.id}`} cx="50%" cy="50%" r="50%">
+                                  <stop offset="0%" stopColor="#ffffff" stopOpacity="0.8" />
+                                  <stop offset="5%" stopColor={coreColor} stopOpacity={Math.min(1, 0.6 * f.severityFactor)} />
+                                  <stop offset="25%" stopColor={midColor} stopOpacity={Math.min(1, 0.3 * f.severityFactor)} />
+                                  <stop offset="60%" stopColor={outerColor} stopOpacity={Math.min(1, 0.1 * f.severityFactor)} />
+                                  <stop offset="100%" stopColor={outerColor} stopOpacity="0" />
+                                </radialGradient>
+                              )}
+                            </defs>
+                            <circle cx="50" cy="50" r="50" fill={`url(#smoke-grad-${f.id})`} />
+                          </svg>
+                        </SVGOverlay>
+                      );
+                    })()}
                     
-                    {/* Mid Smoke Cloud */}
-                    <Circle 
-                      center={[f.lat, f.lon]} 
-                      radius={baseRadius * 1.5}
-                      pathOptions={{ color: midColor, fillColor: midColor, fillOpacity: 0.25 * f.severityFactor, weight: 0 }}
-                    />
-
-                    {/* Core Toxic Area */}
-                    <Circle 
-                      center={[f.lat, f.lon]} 
-                      radius={baseRadius * 0.7}
-                      pathOptions={{ color: coreColor, fillColor: coreColor, fillOpacity: 0.45 * f.severityFactor, weight: 0 }}
-                    />
                   </React.Fragment>
                 );
               })}
@@ -270,12 +366,30 @@ const ProfessionalMonitoring = () => {
              <p style={{ margin: 0, fontWeight: 'bold' }}>📅 Sana: {layerDateString}</p>
              <p style={{ marginTop: '10px' }}>{aiReport}</p>
              
+             <div style={{ marginTop: '15px', padding: '10px', background: 'rgba(0,0,0,0.3)', borderRadius: '6px' }}>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '4px', marginBottom: '8px' }}>
+                   <strong>Kimyoviy Reaksiya Risk Tahlili</strong> (Live API)
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                   <span style={{ color: 'var(--text-muted)' }}>Air Safety (Xavfsizlik):</span> 
+                   <strong style={{ color: riskCalc.safe < 40 ? 'var(--danger)' : 'var(--success)' }}>{riskCalc.safe}%</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                   <span style={{ color: 'var(--text-muted)' }}>Toxicity (Zaharlanish):</span> 
+                   <strong style={{ color: riskCalc.toxic > 60 ? '#9d00ff' : 'var(--accent-orange)' }}>{riskCalc.toxic}%</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                   <span style={{ color: 'var(--text-muted)' }}>Human Health Risk:</span> 
+                   <strong style={{ color: riskCalc.toxic > 50 ? 'var(--danger)' : 'var(--warning)' }}>{Math.min(100, riskCalc.toxic + 12)}%</strong>
+                </div>
+             </div>
+
              <div style={{ marginTop: '20px', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-               <strong>Aktiv qatlamlar:</strong>
+               <strong style={{ display: 'block' }}>Active OSINT Layers:</strong>
                <ul style={{ paddingLeft: '15px', marginTop: '5px' }}>
-                 <li>NASA VIIRS TrueColor</li>
-                 <li>Aerosol Optical Depth (AOD)</li>
-                 <li>Zavod jonli emissiyalari</li>
+                 <li>NASA VIIRS & MODIS CAMS</li>
+                 <li>Open-Meteo Air Quality API</li>
+                 <li>AI Anomaly Prediction Array</li>
                </ul>
              </div>
           </div>

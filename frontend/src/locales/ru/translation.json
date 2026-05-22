@@ -4,7 +4,8 @@
     "eco_ranking": "Эко-Рейтинг",
     "prediction": "AI Прогноз",
     "behavior": "Анализ Поведения",
-    "pro_monitoring": "Pro Мониторинг"
+    "pro_monitoring": "Pro Мониторинг",
+    "chemical_hazard": "Хим. Опасность"
   },
   "status": {
     "system_active": "СИСТЕМА АКТИВНА"

@@ -4,7 +4,7 @@ from datetime import datetime
 from pydantic import BaseModel
 from typing import Optional
 
-from .database import Base
+from database import Base
 
 # SQLAlchemy Models
 class EmissionData(Base):
@@ -57,3 +57,37 @@ class AnomalyResponse(BaseModel):
 
     class Config:
         orm_mode = True
+
+# Hazard Assessment Schema
+class HazardThreat(BaseModel):
+    substance_key: str
+    name: str
+    full_name: str
+    measured_value: float
+    who_threshold: float
+    unit: str
+    excess_ratio: float
+    organs: list
+    symptoms: str
+    is_carcinogen: bool
+    severity: str
+    icon: str
+
+class HazardReaction(BaseModel):
+    id: str
+    name: str
+    equation: str
+    product: str
+    mechanism: str
+    health_effect: str
+    severity: str
+
+class HazardReport(BaseModel):
+    region: str
+    hazard_level: str
+    violation_count: int
+    active_threats: list
+    active_reactions: list
+    recommendations: list
+    substances_reference: list
+    latest_measurements: Optional[dict] = None

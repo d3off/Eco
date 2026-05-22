@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { Globe, BarChart2, BrainCircuit, Activity, Eye, Rocket, Command } from 'lucide-react';
+import { Globe, BarChart2, BrainCircuit, Activity, Eye, Rocket, Command, FlaskConical } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 const Navbar = () => {
@@ -55,6 +55,10 @@ const Navbar = () => {
         <NavLink to="/promonitoring" className={({isActive}) => isActive ? 'nav-link active' : 'nav-link'}>
           <Command size={18} />
           {t('nav.pro_monitoring', 'Pro Monitoring')}
+        </NavLink>
+        <NavLink to="/hazard" className={({isActive}) => isActive ? 'nav-link active' : 'nav-link'}>
+          <FlaskConical size={18} />
+          {t('nav.chemical_hazard', 'Chemical Hazard')}
         </NavLink>
       </div>
 

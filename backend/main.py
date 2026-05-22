@@ -2,7 +2,7 @@ from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import List
-import models, database, ml_model
+import models, database, ml_model, chemical_hazards
 
 models.Base.metadata.create_all(bind=database.engine)
 
@@ -105,3 +105,77 @@ def get_behavior(region: str, db: Session = Depends(database.get_db)):
     
     insights = ml_model.detector.analyze_behavior(data_dicts)
     return {"region": region, "insights": insights}
+
+@app.get("/api/hazards/{region}", response_model=models.HazardReport)
+def get_hazard_assessment(region: str, db: Session = Depends(database.get_db)):
+    """Оценка химической опасности региона на основе последних замеров."""
+    # Берём последние 5 замеров для усреднения
+    emissions = (
+        db.query(models.EmissionData)
+        .filter(models.EmissionData.region == region)
+        .order_by(models.EmissionData.timestamp.desc())
+        .limit(5)
+        .all()
+    )
+
+    if not emissions:
+        raise HTTPException(status_code=404, detail=f"Данные для региона '{region}' не найдены")
+
+    # Среднее значение по последним замерам
+    avg_co2     = sum(e.co2_level     for e in emissions) / len(emissions)
+    avg_no2     = sum(e.no2_level     for e in emissions) / len(emissions)
+    avg_methane = sum(e.methane_level for e in emissions) / len(emissions)
+
+    # Получаем оценку из базы химических реакций
+    assessment = chemical_hazards.assess_hazard(
+        co2=avg_co2,
+        no2=avg_no2,
+        methane=avg_methane,
+    )
+
+    assessment["region"] = region
+    assessment["latest_measurements"] = {
+        "co2_level":     round(avg_co2, 2),
+        "no2_level":     round(avg_no2, 2),
+        "methane_level": round(avg_methane, 2),
+        "eco_score":     round(sum(e.eco_score for e in emissions) / len(emissions), 2),
+        "sample_count":  len(emissions),
+    }
+
+    return assessment
+
+@app.get("/api/hazards")
+def get_all_regions_hazard(db: Session = Depends(database.get_db)):
+    """Оценка химической опасности для всех регионов."""
+    from sqlalchemy import func
+    regions = db.query(models.EmissionData.region).distinct().all()
+    regions = [r[0] for r in regions]
+
+    result = []
+    for region in regions:
+        emissions = (
+            db.query(models.EmissionData)
+            .filter(models.EmissionData.region == region)
+            .order_by(models.EmissionData.timestamp.desc())
+            .limit(5)
+            .all()
+        )
+        if not emissions:
+            continue
+
+        avg_co2     = sum(e.co2_level     for e in emissions) / len(emissions)
+        avg_no2     = sum(e.no2_level     for e in emissions) / len(emissions)
+        avg_methane = sum(e.methane_level for e in emissions) / len(emissions)
+
+        assessment = chemical_hazards.assess_hazard(avg_co2, avg_no2, avg_methane)
+        result.append({
+            "region": region,
+            "hazard_level": assessment["hazard_level"],
+            "violation_count": assessment["violation_count"],
+            "active_reactions_count": len(assessment["active_reactions"]),
+            "co2_level":     round(avg_co2, 2),
+            "no2_level":     round(avg_no2, 2),
+            "methane_level": round(avg_methane, 2),
+        })
+
+    return result

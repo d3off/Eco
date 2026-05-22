@@ -7,6 +7,7 @@ import EcoRanking from './pages/EcoRanking';
 import PredictionDashboard from './pages/PredictionDashboard';
 import BehaviorAnalysis from './pages/BehaviorAnalysis';
 import ProfessionalMonitoring from './pages/ProfessionalMonitoring';
+import HazardPage from './pages/HazardPage';
 
 function App() {
   return (
@@ -21,6 +22,7 @@ function App() {
               <Route path="/prediction" element={<PredictionDashboard />} />
               <Route path="/behavior"   element={<BehaviorAnalysis />} />
               <Route path="/promonitoring" element={<ProfessionalMonitoring />} />
+              <Route path="/hazard"       element={<HazardPage />} />
               <Route path="*"           element={<Navigate to="/" />} />
             </Routes>
           </main>
