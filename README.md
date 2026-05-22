@@ -124,7 +124,8 @@ Dastur to‘g‘ri ishlashi uchun ikkala terminal ham bir vaqtning o‘zida ishl
 
 Qismlardan biri ishlamasa, sayt noto‘g‘ri ishlashi yoki umuman ochilmasligi mumkin.
 
-**СПРАВОЧНИК НА РУССКОМ: **
+---
+**СПРАВОЧНИК НА РУССКОМ:**
 # Инструкция по запуску EcoOrbit
 
 Чтобы повторно запустить программу или открыть её на другом компьютере, выполните следующие шаги. Проект состоит из двух частей, поэтому потребуется открыть два окна терминала (Command Prompt / PowerShell).
