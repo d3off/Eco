@@ -1,3 +1,5 @@
+**Link:** https://eco-orbitnewversionprime.vercel.app/prediction
+
 **UZBEKCHA QOLLANMA**
 # EcoOrbit dasturini ishga tushirish bo‘yicha qo‘llanma
 
